@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ObodMasjidBot.Data
 {
-    enum RegistrationState
+    public enum RegistrationState
     {
         NotStarted,
         AwaitingGender,

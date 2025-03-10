@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
 using ObodMasjidBot.Data;
 
 class Program
@@ -16,13 +17,25 @@ class Program
     private static ITelegramBotClient _botClient;
     private static ReceiverOptions _receiverOptions;
     private static List<HasharEvent> _hasharEvents = new List<HasharEvent>();
-    private static Dictionary<long, List<HasharParticipation>> _userStats = new Dictionary<long, List<HasharParticipation>>();
+    private static Dictionary<long, List<HasharParticipation>> _userStats 
+        = new Dictionary<long, List<HasharParticipation>>();
     private static List<long> _subscribedUsers = new List<long>();
     private static Dictionary<long, UserState> _userStates = new Dictionary<long, UserState>();
+    private static List<Masjid> _masjids = new List<Masjid>();
+    private static IConfiguration _configuration;
+    private static List<string> _adminUsernames;
 
     static async Task Main()
     {
-        _botClient = new TelegramBotClient("7559448626:AAGJa6X8d4XHoruruEgvcyEbmSKC4-TyW0c");
+        _configuration = new ConfigurationBuilder()
+            .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+
+        var botToken = _configuration["BotSettings:BotToken"];
+        _adminUsernames = _configuration.GetSection("BotSettings:AdminUsernames").Get<List<string>>();
+
+        _botClient = new TelegramBotClient(botToken);
         _receiverOptions = new ReceiverOptions
         {
             AllowedUpdates = new[] { UpdateType.Message, UpdateType.CallbackQuery },
@@ -54,9 +67,17 @@ class Program
     {
         return new ReplyKeyboardMarkup(new[]
         {
-            new [] {new KeyboardButton("Hashar qo'shish"), new KeyboardButton("Erkak hasharchilarni ko'rish")},
-            new [] {new KeyboardButton("Ayol hasharchilarni ko'rish"), new KeyboardButton("Ortga qaytish") }
-        });
+            new[] { new KeyboardButton("Hashar qo'shish"), new KeyboardButton("Masjid qo'shish") },
+            new[] { new KeyboardButton(
+                "Ayol hasharchilarni ko'rish"), 
+                new KeyboardButton("Erkak hasharchilarni ko'rish"),
+                new KeyboardButton("Ortga qaytish") 
+            }
+        })
+        {
+            ResizeKeyboard = true
+        };
+
     }
 
     private static ReplyKeyboardMarkup GetGenderKeyboard()
@@ -68,6 +89,29 @@ class Program
         {
             ResizeKeyboard = true,
             OneTimeKeyboard = true
+        };
+    }
+    
+    private static InlineKeyboardMarkup GetMasjidSearchKeyboard()
+    {
+        var keyboard = new InlineKeyboardMarkup(new[]
+        {
+            new[] { InlineKeyboardButton.WithCallbackData("Search Masjids", "search_masjid") },
+            new[] { InlineKeyboardButton.WithCallbackData("Ortga qaytish", "back") }
+        });
+        return keyboard;
+    }
+    
+    private static ReplyKeyboardMarkup GetMasjidSelectionKeyboard()
+    {
+        var keyboardButtons = _masjids.Select(m => new[] { new KeyboardButton(m.Name) }).ToList();
+        
+        // Add a back button
+        keyboardButtons.Add(new[] { new KeyboardButton("Ortga qaytish") });
+        
+        return new ReplyKeyboardMarkup(keyboardButtons)
+        {
+            ResizeKeyboard = true
         };
     }
 
@@ -82,8 +126,29 @@ class Program
             OneTimeKeyboard = true
         };
     }
+    
+    private static InlineKeyboardMarkup GetMasjidResultsKeyboard(string searchTerm = "")
+    {
+        var filteredMasjids = string.IsNullOrEmpty(searchTerm) 
+            ? _masjids 
+            : _masjids.Where(m => m.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
 
-    private static async Task UpdateHandler(ITelegramBotClient botClient, Update update, CancellationToken cancellationToken)
+        var keyboardButtons = filteredMasjids
+            .Select(m => new[] 
+            { 
+                InlineKeyboardButton.WithCallbackData(m.Name, $"select_masjid_{m.Id}") 
+            })
+            .ToList();
+
+        keyboardButtons.Add(new[] { InlineKeyboardButton.WithCallbackData("Ortga qaytish", "back") });
+
+        return new InlineKeyboardMarkup(keyboardButtons);
+    }
+
+    private static async Task UpdateHandler(
+        ITelegramBotClient botClient, 
+        Update update, 
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -116,7 +181,9 @@ class Program
 
                             await botClient.SendTextMessageAsync(
                                 chatId: chat.Id,
-                                text: $"Tabriklaymiz! Ro'yxatdan muvaffaqiyatli o'tdingiz.\n\nSizning ma'lumotlaringiz:\nJins: {userState.Gender}\nTelefon: {userState.PhoneNumber}",
+                                text: $"Tabriklaymiz! Ro'yxatdan muvaffaqiyatli o'tdingiz." +
+                                      $"\n\nSizning ma'lumotlaringiz:" +
+                                      $"\nJins: {userState.Gender}\nTelefon: {userState.PhoneNumber}",
                                 replyMarkup: GetPersistentKeyboard()
                             );
 
@@ -125,6 +192,41 @@ class Program
 
                         if (message.Type == MessageType.Text)
                         {
+                            if (_adminUsernames.Contains(user.Username) &&
+                                userState.AddingMasjidState == AddingMasjidStateEnum.AddingName)
+                            {
+                                
+                            }
+                                
+                            if (_adminUsernames.Contains(user.Username) &&
+                                userState.AddingMasjidState == AddingMasjidStateEnum.AddingLocation)
+                            {
+                                
+                            }
+                            
+                            if (_adminUsernames.Contains(user.Username) &&
+                                userState.AddingMasjidState == AddingMasjidStateEnum.AddingPhoto)
+                            {
+                                
+                            }
+                            
+                            if (_adminUsernames.Contains(user.Username) &&
+                                userState.AddingMasjidState == AddingMasjidStateEnum.AddingNumber)
+                            {
+                                
+                            }
+                            
+                            if (userState.IsAddingHashar && _adminUsernames.Contains(user.Username) && 
+                                message.Text != "Hashar qo'shish" && message.Text != "Ortga qaytish")
+                            {
+                                await botClient.SendTextMessageAsync(
+                                    chatId: chat.Id,
+                                    text: $"Qidiruv natijalari: '{message.Text}'",
+                                    replyMarkup: GetMasjidResultsKeyboard(message.Text)
+                                );
+                                userState.IsAddingHashar = false;
+                                return;
+                            }
                             if (userState.RegistrationState == RegistrationState.AwaitingGender)
                             {
                                 if (message.Text == "Erkak 👨" || message.Text == "Ayol 👩")
@@ -137,13 +239,14 @@ class Program
                                         text: "Iltimos, telefon raqamingizni yuboring:",
                                         replyMarkup: GetPhoneNumberKeyboard()
                                     );
+                                    
                                     return;
                                 }
                                 else
                                 {
                                     await botClient.SendTextMessageAsync(
                                         chatId: chat.Id,
-                                        text: "Iltimos, jinsni tanlang:",
+                                        text: "Iltimos, jinsingizi tanlang:",
                                         replyMarkup: GetGenderKeyboard()
                                     );
                                     return;
@@ -152,7 +255,8 @@ class Program
 
                             if (message.Text == "/start")
                             {
-                                bool isNewUser = !_subscribedUsers.Contains(user.Id) && userState.RegistrationState != RegistrationState.Complete;
+                                bool isNewUser = !_subscribedUsers.Contains(user.Id) 
+                                                 && userState.RegistrationState != RegistrationState.Complete;
 
                                 if (isNewUser)
                                 {
@@ -162,28 +266,25 @@ class Program
                                 {
                                     await botClient.SendTextMessageAsync(
                                         chatId: chat.Id,
-                                        text: $"Assalomu alaykum, {user.FirstName}! Obod masjid botiga qayta xush kelibsiz!\nQuyidagi tugmalardan foydalanishingiz mumkin:",
+                                        text: $"Assalomu alaykum, {user.FirstName}! " +
+                                              $"Obod masjid botiga qayta xush kelibsiz!" +
+                                              $"\nQuyidagi tugmalardan foydalanishingiz mumkin:",
                                         replyMarkup: GetPersistentKeyboard()
                                     );
                                 }
                                 return;
                             }
-                            else if (message.Text == "/stats" || message.Text == "📊 Mening Statistikam")
+                            else if (message.Text == "📊 Mening Statistikam")
                             {
                                 await SendUserStats(chat.Id, user.Id);
                                 return;
                             }
-                            else if (message.Text == "/hasharchilar")
-                            {
-                                await ShowHasharParticipants(chat.Id, user.Id);
-                                return;
-                            }
-                            else if (message.Text == "/events" || message.Text == "📅 Bo'lajak Hasharlar")
+                            else if (message.Text == "📅 Bo'lajak Hasharlar")
                             {
                                 await ShowUpcomingEvents(chat.Id);
                                 return;
                             }
-                            else if (message.Text == "/help" || message.Text == "ℹ️ Yordam")
+                            else if (message.Text == "ℹ️ Yordam")
                             {
                                 await SendHelpMessage(chat.Id);
                                 return;
@@ -192,14 +293,26 @@ class Program
                             {
                                 await botClient.SendTextMessageAsync(
                                     chatId: chat.Id,
-                                    text: "Ortga qaytingiz",
+                                    text: "Ortga qaytdingiz",
                                     replyMarkup: GetPersistentKeyboard()
                                 );
                                 return;
                             }
-                            else if (message.Text == "Hashar qo'shish" && user.Username == "theesanjar")
+                            else if (message.Text == "Masjid qo'shish" && _adminUsernames.Contains(user.Username))
                             {
-                                
+                                userState.AddingMasjidState = AddingMasjidStateEnum.AddingName;
+                                await botClient.SendTextMessageAsync(
+                                    chatId: chat.Id,
+                                    text: "Masjid nomini kiriting"
+                                );
+                            }
+                            else if (message.Text == "Hashar qo'shish" && _adminUsernames.Contains(user.Username))
+                            {
+                                userState.IsAddingHashar = true;
+                                await botClient.SendTextMessageAsync(
+                                    chatId: chat.Id,
+                                    text: "Masjidni tanlang",
+                                    replyMarkup: GetMasjidSearchKeyboard());
                             }
                             else if (message.Text == "🔄 Yangilash")
                             {
@@ -210,21 +323,9 @@ class Program
                                 );
                                 return;
                             }
-                            else if (message.Text == "/adminPanel" && user.Username == "theesanjar")
+                            else if (message.Text == "/adminPanel" && _adminUsernames.Contains(user.Username))
                             {
                                 await ShowAdminPanel(message.Chat.Id);
-                            }
-                            else if (message.Text == "/announce" && user.Username == "theesanjar")
-                            {
-                                _hasharEvents.Add(new HasharEvent()
-                                {
-                                    Date = DateTime.Now.AddDays(3),
-                                    Masjid = "Mulla Qosim masjidi",
-                                    Time = "08:00"
-                                });
-
-                                await AnnounceHashar();
-                                return;
                             }
                         }
                         return;
@@ -308,7 +409,9 @@ class Program
 
                             await botClient.SendTextMessageAsync(
                                 chatId: chat.Id,
-                                text: $"Qayd etildi: Siz {FormatDateString(hasharDate)} kunidagi hasharga {(attended ? "qatnashdingiz ✅" : "qatnashmasdingiz ❌")}.",
+                                text: $"Qayd etildi: Siz {FormatDateString(hasharDate)}" +
+                                      $" kunidagi hasharga " +
+                                      $"{(attended ? "qatnashdingiz ✅" : "qatnashmasdingiz ❌")}.",
                                 replyMarkup: GetPersistentKeyboard()
                             );
                             await botClient.AnswerCallbackQueryAsync(callbackQuery.Id);
@@ -337,7 +440,8 @@ class Program
     {
         // Create welcome message with formatting
         var welcomeText = $"Assalomu alaykum, {firstName}! 👋\n\n" +
-                         "Obod masjid botiga xush kelibsiz! Bu bot masjidlarni tozalash bo'yicha hashar tadbirlariga qo'shilishingizga yordam beradi.\n\n" +
+                         "Obod masjid botiga xush kelibsiz! " +
+                         "Bu bot masjidlarni tozalash bo'yicha hashar tadbirlariga qo'shilishingizga yordam beradi.\n\n" +
                          "• Kanalimizda e'lon qilinadigan bo'lajak hasharlar (haftada 1-3 marta) haqida xabar olasiz\n" +
                          "• Hasharlarni ko'ngillilik asosida ro'yxatdan o'tkazishingiz mumkin\n" +
                          "• O'z ishtirokingizni kuzatib borishingiz mumkin\n\n" +
@@ -407,7 +511,8 @@ class Program
     private static async Task AnnounceHashar()
     {
         var hashar = _hasharEvents.OrderBy(h => h.Date).First();
-        var message = $"E'lon! {hashar.Date:MMMM d, yyyy} sanasida soat {hashar.Time} da {hashar.Masjid} masjidida hashar uyushtirilmoqda, kelasizmi?";
+        var message = $"E'lon! {hashar.Date:MMMM d, yyyy} sanasida soat {hashar.Time} da " +
+                      $"{hashar.Masjid} masjidida hashar uyushtirilmoqda, kelasizmi?";
         var keyboard = new InlineKeyboardMarkup(new[]
         {
             new[] {
@@ -476,7 +581,9 @@ class Program
         var attendanceRate = total > 0 ? (double)attended / total * 100 : 0;
 
         var summary = $"<b>Sizning Hashar Statistikangiz:</b>\n\n" +
-                      $"{string.Join("\n", stats.OrderByDescending(s => s.Date).Select(s => $"{s.Date:yyyy-MM-dd}: {(s.Attended ? "✅ Qatnashgan" : "❌ Qatnashmagan")}"))}\n\n" +
+                      $"{string.Join("\n", stats.OrderByDescending(s => s.Date)
+                          .Select(s => $"{s.Date:yyyy-MM-dd}: " +
+                                       $"{(s.Attended ? "✅ Qatnashgan" : "❌ Qatnashmagan")}"))}\n\n" +
                       $"<b>Jami:</b> {attended}/{total} hashar ({attendanceRate:F1}%)";
 
         await _botClient.SendTextMessageAsync(
@@ -486,17 +593,17 @@ class Program
             replyMarkup: GetPersistentKeyboard()
         );
     }
-
     private static async Task ShowHasharParticipants(long chatId, long userId)
     {
         
     }
-
     private static Task ErrorHandler(ITelegramBotClient botClient, Exception error, CancellationToken cancellationToken)
     {
         var errorMessage = error switch
         {
-            ApiRequestException apiRequestException => $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
+            ApiRequestException apiRequestException => $"Telegram API Error:\n" +
+                                                       $"[{apiRequestException.ErrorCode}]" +
+                                                       $"\n{apiRequestException.Message}",
             _ => error.ToString()
         };
         Console.WriteLine(errorMessage);

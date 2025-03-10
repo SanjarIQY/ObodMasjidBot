@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ObodMasjidBot.Data
 {
-    class HasharEvent
+    public class HasharEvent
     {
         public Guid Id { get; set; } = Guid.NewGuid(); // Generate a unique ID
         public DateTime Date { get; set; }
